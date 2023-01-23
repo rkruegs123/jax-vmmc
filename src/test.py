@@ -64,7 +64,11 @@ def gen_tables(mu, nu, pairwise_energies_fn):
 
     return eps_mu_mu, eps_mu_nu, eps_nu_mu
 
-
+"""
+Note:
+- assumes that order doesn't matter
+  - i.e. link formation of ij doesn't depend on link formation of kl
+"""
 if __name__ == "__main__":
     n = 50
     box_size = quantity.box_size_at_number_density(n, 0.1, 3)
@@ -113,7 +117,7 @@ if __name__ == "__main__":
     # rev_link_coinflips = (rev_link_probs > rev_link_coinflip_thresholds).astype(jnp.int32)
 
     ratio = prelink_probs / rev_link_probs
-    uncorrected_probs = jnp.minimum(ratio, 1.0)
+    uncorrected_probs = jnp.minimum(ratio, 1.0) # can be made branchless
 
     all_link_probs = jnp.multiply(prelink_coinflips, uncorrected_probs)
     all_link_coinflip_thresholds = random.uniform(key, shape=all_link_probs.shape)
@@ -122,3 +126,25 @@ if __name__ == "__main__":
     pdb.set_trace()
 
     print("done")
+
+
+
+    """
+    Flood fill:
+    - given adjacency matrix A: nxn
+    - randomly sample a seed vertex
+    - get the corresponding row in the precomputed, one-hot link matrix
+      - x: (n,)
+    - repeat x*A: (n,) n times
+      - scan over x
+      - final x will just be things in the cluster.
+    """
+
+    # also, do the frustrated thing
+
+    # for next time: flood fill and frustrated thing. maybe a simple test case as well.
+
+    # note: we still haven't quite worked out how to do max cluster size
+    # option 1: only do d iterations. problem is that graph size doesn't correspond to space
+    # option 2: do the whole thing then only sample d things.
+    # problems with all of these: maintaining connectedness, uniformly sampling something of size `d`
