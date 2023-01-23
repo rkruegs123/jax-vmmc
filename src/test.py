@@ -83,12 +83,42 @@ if __name__ == "__main__":
     def pairwise_energy_fn(p1, p2):
         dist = jnp.linalg.norm(p1.center - p2.center)
         # return center_energy_fn(dist)
-        return energy.soft_sphere(dist)
+        # return energy.soft_sphere(dist)
+        # return energy.simple_spring(dist)
+        # return energy.lennard_jones(dist)
+        return energy.simple_spring(dist, length=0.5) + energy.soft_sphere(dist)
 
 
     get_pairwise_energies = vmap(vmap(pairwise_energy_fn, in_axes=(None, 0)),
                                  in_axes=(0, None))
 
-    t1, t2, t3 = gen_tables(mu, nu, get_pairwise_energies)
+    eps_mu_mu, eps_mu_nu, eps_nu_mu = gen_tables(mu, nu, get_pairwise_energies)
+
+    key = random.PRNGKey(0) # note: fixed for now
+
+    prelink_diffs = eps_nu_mu - eps_mu_mu # eps_ip_j^mu - eps_i_j^mu
+    temp = 300
+    beta = 1/temp
+    def boltz(x):
+        return jnp.exp(-beta * x)
+    prelink_boltz = boltz(prelink_diffs)
+    prelink_probs = jnp.maximum(0, 1-prelink_boltz) # can be made branchless
+    prelink_coinflip_thresholds = random.uniform(key, shape=prelink_probs.shape)
+    prelink_coinflips = (prelink_probs > prelink_coinflip_thresholds).astype(jnp.int32)
+
+    rev_link_diffs = eps_mu_nu - eps_mu_mu # eps_i_jp^mu - eps_i_j^mu
+    rev_link_boltz = boltz(rev_link_diffs)
+    rev_link_probs = jnp.maximum(0, 1-rev_link_boltz) # can be made branchless
+    # rev_link_coinflip_thresholds = random.uniform(key, shape=rev_link_probs.shape)
+    # rev_link_coinflips = (rev_link_probs > rev_link_coinflip_thresholds).astype(jnp.int32)
+
+    ratio = prelink_probs / rev_link_probs
+    uncorrected_probs = jnp.minimum(ratio, 1.0)
+
+    all_link_probs = jnp.multiply(prelink_coinflips, uncorrected_probs)
+    all_link_coinflip_thresholds = random.uniform(key, shape=all_link_probs.shape)
+    all_link_coinflips = (all_link_probs > all_link_coinflip_thresholds).astype(jnp.int32)
+
+    pdb.set_trace()
 
     print("done")
