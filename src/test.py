@@ -1,5 +1,6 @@
 import pdb
 
+import jax
 import jax.numpy as jnp
 from jax import random
 from jax import vmap
@@ -71,7 +72,8 @@ Note:
 """
 if __name__ == "__main__":
     n = 50
-    box_size = quantity.box_size_at_number_density(n, 0.1, 3)
+    # box_size = quantity.box_size_at_number_density(n, 0.1, 3)
+    box_size = 50
     displacement, shift = space.periodic(box_size)
 
     key = random.PRNGKey(0)
@@ -96,10 +98,13 @@ if __name__ == "__main__":
     get_pairwise_energies = vmap(vmap(pairwise_energy_fn, in_axes=(None, 0)),
                                  in_axes=(0, None))
 
+    # precompute the energy tables
     eps_mu_mu, eps_mu_nu, eps_nu_mu = gen_tables(mu, nu, get_pairwise_energies)
 
     key = random.PRNGKey(0) # note: fixed for now
 
+
+    # Precompute the coinflips
     prelink_diffs = eps_nu_mu - eps_mu_mu # eps_ip_j^mu - eps_i_j^mu
     temp = 300
     beta = 1/temp
@@ -125,6 +130,20 @@ if __name__ == "__main__":
 
     pdb.set_trace()
 
+
+    # Do the floodfill
+    seed_vertex = 9 # FIXME: choose randomly
+    seed_row = all_link_coinflips[seed_vertex]
+    def foo(curr_cluster, v_idx):
+        return curr_cluster + jnp.matmul(curr_cluster, all_link_coinflips), None # note: only have to add because we don't add the identity to all_link_coinflips
+    cluster, _ = jax.lax.scan(foo, seed_row, jnp.arange(n))
+
+    pdb.set_trace()
+
+
+
+
+
     print("done")
 
 
@@ -148,3 +167,13 @@ if __name__ == "__main__":
     # option 1: only do d iterations. problem is that graph size doesn't correspond to space
     # option 2: do the whole thing then only sample d things.
     # problems with all of these: maintaining connectedness, uniformly sampling something of size `d`
+
+
+
+
+
+    # Some notes for 1/30/23:
+    # - i think we need the identity in the coinflip matrix. otherwise, we have to add (see foo)
+    # - i think there is a problem witht he matrix construction. we really want things to be symmetric, right?! maybe just do the thing, then copy its lower diagonal to its upper diagonnal, or vise versa
+    # - should go over the test in the paper
+    # - how to identify the boundary for frustrated check?
