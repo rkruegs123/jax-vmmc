@@ -106,27 +106,52 @@ if __name__ == "__main__":
 
     # Precompute the coinflips
     prelink_diffs = eps_nu_mu - eps_mu_mu # eps_ip_j^mu - eps_i_j^mu
-    temp = 300
+    # temp = 300
+    temp = 0.3
     beta = 1/temp
     def boltz(x):
         return jnp.exp(-beta * x)
     prelink_boltz = boltz(prelink_diffs)
     prelink_probs = jnp.maximum(0, 1-prelink_boltz) # can be made branchless
     prelink_coinflip_thresholds = random.uniform(key, shape=prelink_probs.shape)
-    prelink_coinflips = (prelink_probs > prelink_coinflip_thresholds).astype(jnp.int32)
+    prelink_coinflips = (prelink_probs > prelink_coinflip_thresholds).astype(jnp.int32) # matrix A
 
     rev_link_diffs = eps_mu_nu - eps_mu_mu # eps_i_jp^mu - eps_i_j^mu
     rev_link_boltz = boltz(rev_link_diffs)
     rev_link_probs = jnp.maximum(0, 1-rev_link_boltz) # can be made branchless
     # rev_link_coinflip_thresholds = random.uniform(key, shape=rev_link_probs.shape)
     # rev_link_coinflips = (rev_link_probs > rev_link_coinflip_thresholds).astype(jnp.int32)
-
-    ratio = prelink_probs / rev_link_probs
+    # ratio = prelink_probs / rev_link_probs
+    ratio = jnp.where(prelink_probs == 0, 0.0, rev_link_probs / prelink_probs)
     uncorrected_probs = jnp.minimum(ratio, 1.0) # can be made branchless
-
-    all_link_probs = jnp.multiply(prelink_coinflips, uncorrected_probs)
+    # all_link_probs = jnp.multiply(prelink_coinflips, uncorrected_probs)
+    all_link_probs = uncorrected_probs
     all_link_coinflip_thresholds = random.uniform(key, shape=all_link_probs.shape)
-    all_link_coinflips = (all_link_probs > all_link_coinflip_thresholds).astype(jnp.int32)
+    arr_B = (all_link_probs > all_link_coinflip_thresholds).astype(jnp.int32) # matrix B
+
+    all_link_coinflips = jnp.multiply(prelink_coinflips, arr_B)
+    all_link_coinflips = all_link_coinflips + jnp.eye(all_link_coinflips.shape[0]) # matrix C
+
+    frustrated = jnp.multiply(prelink_coinflips, 1 - arr_B) # frustrated
+
+    pdb.set_trace()
+
+    # A is prelink
+    # B is rev link (note: maybe could be A.T?)
+    # A * (1 - B) is frustrated
+    # not A is failed -- note: does not include not B
+    # A and B is link formed -- note: includes the `min` step
+
+
+    # proposal for computing `all_link_coinflips`:
+    # - compute A, do its coinflips. `A_coinflip`
+    # - compute failed matrix, F, as (not A_coinflip)
+    # - compute B as min(1, A / A.T) element-wise (the `min` expression)
+    # - compute `B_coinflip`
+    # - compute C: A_coinflip AND B_coinflip -- this is what you use in the floodfill
+    # - update C: set diagonal to be 1
+    # Note: we are going A --> C. We should compute A -> B -> C to determine frustrated links
+
 
     pdb.set_trace()
 
@@ -135,13 +160,15 @@ if __name__ == "__main__":
     seed_vertex = 9 # FIXME: choose randomly
     seed_row = all_link_coinflips[seed_vertex]
     def foo(curr_cluster, v_idx):
-        return curr_cluster + jnp.matmul(curr_cluster, all_link_coinflips), None # note: only have to add because we don't add the identity to all_link_coinflips
+        # return curr_cluster + jnp.matmul(curr_cluster, all_link_coinflips), None # note: only have to add because we don't add the identity to all_link_coinflips
+        return jnp.matmul(curr_cluster, all_link_coinflips), None # note: only have to add because we don't add the identity to all_link_coinflips
     cluster, _ = jax.lax.scan(foo, seed_row, jnp.arange(n))
+    cluster = jnp.minimum(cluster, 1)
 
     pdb.set_trace()
 
 
-
+    # TODO: check rejection with C * F * (1 - C)
 
 
     print("done")
