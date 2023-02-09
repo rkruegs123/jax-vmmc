@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from jax import random
 from jax import vmap
 from jax.config import config as jax_config
+jax_config.update('jax_enable_x64', True)
 
 from jax_md import rigid_body
 
@@ -44,10 +45,18 @@ Note:
 - assumes that order doesn't matter
   - i.e. link formation of ij doesn't depend on link formation of kl
 """
-def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3):
+def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
     n = body.center.shape[0]
-    seed_vertices_key, key = random.split(key, 2)
+    seed_vertices_key, move_key, key = random.split(key, 3)
     seed_vertices = jax.random.randint(seed_vertices_key, (n_steps,), minval=0, maxval=n-1)
+
+    # Pre-select all the moves
+    # note: 0 is translational, 1 is rotational
+    # note: when doing cluster MC for non-RigidBody stuff, while rotation is not defined for an individual paticle, rotation *is* defined for a cluster. So, we can just cast it to a RigidBody, d oMC wtith translation + rotation and return the center at the end
+    # note: rot_threshold can be tuned to change the likelihood of move types
+    rotation_thresholds = random.uniform(move_key, shape=(n_steps,))
+    move_types = (rotation_thresholds > rot_threshold).astype(jnp.int32)
+
 
     beta = 1/temp
     def boltz(x):
@@ -57,10 +66,23 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3):
     mu = body
     traj = [mu]
 
-    for i, iter_key, seed_vertex in tqdm(zip(range(n_steps), iter_keys, seed_vertices)):
-        iter_key, displacement_key = random.split(iter_key, 2)
-        move = utils.gen_random_displacement(r_min=0.5, r_max=1.0, key=displacement_key)
-        nu = rigid_body.RigidBody(mu.center + move, mu.orientation)
+    identity_quaternion_vec = jnp.array([1.0, 0.0, 0.0, 0.0]) # note: [1.0, 0.0, 0.0, 0.0] is the identity for quat. multiplication
+    identity_translation = jnp.array([0.0, 0.0, 0.0]) # note: under addition
+
+    for i, iter_key, seed_vertex, move_type in tqdm(zip(range(n_steps), iter_keys, seed_vertices, move_types)):
+        iter_key, move_key = random.split(iter_key, 2)
+
+
+        trans_move = jnp.where(move_type == 0,
+                               utils.gen_random_displacement(r_min=0.5, r_max=1.0, key=move_key),
+                               identity_translation)
+        # note: can only do a `where` with arrays
+        rot_move_vec = jnp.where(move_type == 1,
+                                 utils.rand_quat_vec(move_key),
+                                 identity_quaternion_vec) # FIXME: don't sample such big rotations! Check HOOMD for how to restrict the range here. TBD.
+        rot_move = rigid_body.Quaternion(rot_move_vec)
+
+        nu = rigid_body.RigidBody(mu.center + trans_move, rot_move * mu.orientation)
 
         eps_mu_mu, eps_mu_nu, eps_nu_mu = gen_tables_fn(mu, nu)
 
@@ -96,8 +118,13 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3):
         cluster, _ = jax.lax.scan(flood_fill_step, seed_row, jnp.arange(n))
         cluster = jnp.minimum(cluster, 1)
 
-        cluster_move = jnp.multiply(move, jnp.expand_dims(cluster, axis=1)) # Particles not in the cluster are masked
-        mu_updated = rigid_body.RigidBody(mu.center + cluster_move, mu.orientation)
+
+        # to get `mu_updated`, we treat cluster like a mask
+        mu_updated_center = jnp.multiply(mu.center, jnp.expand_dims(1-cluster, axis=1)) + jnp.multiply(nu.center, jnp.expand_dims(cluster, axis=1))
+        mu_updated_orientation_vec = jnp.multiply(mu.orientation.vec, jnp.expand_dims(1-cluster, axis=1)) + jnp.multiply(nu.orientation.vec, jnp.expand_dims(cluster, axis=1))
+        mu_updated_orientation = rigid_body.Quaternion(mu_updated_orientation_vec)
+        mu_updated = rigid_body.RigidBody(mu_updated_center, mu_updated_orientation)
+
 
         # check rejection with C * F * (1 - C)
         # is_frustrated = jnp.matmul(jnp.matmul(cluster, frustrated), 1 - cluster)

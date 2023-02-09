@@ -4,6 +4,7 @@ import jax.numpy as jnp
 from jax import random
 from jax import vmap
 from jax.config import config as jax_config
+jax_config.update('jax_enable_x64', True)
 
 from jax_md import util
 from jax_md import rigid_body
@@ -20,9 +21,14 @@ if FLAGS.jax_enable_x64:
     dtype = f64
 
 
+# Note: since we vmap, this takes in an array of keys
 @partial(vmap, in_axes=(0, None))
 def rand_quat(key, dtype):
     return rigid_body.random_quaternion(key, dtype)
+
+# Note: we don't vmap this so it takes in a single key
+def rand_quat_vec(key):
+    return rigid_body._random_quaternion(key, f64)
 
 
 # via spherical coordinates. r_min and r_max are the min and max radii of the sphere
