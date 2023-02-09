@@ -47,6 +47,19 @@ def gen_random_displacement(r_min, r_max, key):
     return jnp.array([x, y, z])
 
 
+
+def gen_random_displacement_2d(r_min, r_max, key):
+    radii_key, theta_key = random.split(key, 2)
+
+    radius = random.uniform(radii_key, minval=r_min, maxval=r_max)
+    theta = random.uniform(theta_key, minval=0, maxval=2*jnp.pi)
+
+    x = radius * jnp.cos(theta)
+    y = radius * jnp.sin(theta)
+
+    return jnp.array([x, y])
+
+
 def get_rand_rigid_body(n, box_size, key):
     pos_key, quat_key = random.split(key, 2)
 
@@ -55,6 +68,16 @@ def get_rand_rigid_body(n, box_size, key):
     quaternion = rand_quat(quat_key, dtype)
 
     body = rigid_body.RigidBody(R, quaternion)
+    return body
+
+
+def get_rand_rigid_body_2d(n, box_size, key):
+    pos_key, angle_key = random.split(key, 2)
+
+    R = box_size * random.uniform(pos_key, (n, 2), dtype=dtype)
+    angle = random.uniform(angle_key, (n,), dtype=dtype) * jnp.pi * 2
+
+    body = rigid_body.RigidBody(R, angle)
     return body
 
 if __name__ == "__main__":

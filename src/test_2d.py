@@ -42,7 +42,7 @@ get_pairwise_energies = vmap(vmap(pairwise_energy_fn, in_axes=(None, 0)),
 
 
 if __name__ == "__main__":
-    import vmmc
+    import vmmc_2d
 
     n = 20
     # box_size = quantity.box_size_at_number_density(n, 0.1, 3)
@@ -52,8 +52,8 @@ if __name__ == "__main__":
     key = random.PRNGKey(0)
 
     key, body_key = random.split(key, 2)
-    init_body = utils.get_rand_rigid_body(n, box_size, body_key)
+    init_body = utils.get_rand_rigid_body_2d(n, box_size, body_key)
 
-    fin_state, traj = vmmc.vmmc(init_body,
-                                partial(gen_tables, pairwise_energies_fn=get_pairwise_energies),
-                                key)
+    fin_state, traj = vmmc_2d.vmmc(init_body,
+                                   partial(gen_tables, pairwise_energies_fn=get_pairwise_energies),
+                                   key)
