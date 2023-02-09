@@ -5,7 +5,7 @@ from tqdm import tqdm
 import jax
 import jax.numpy as jnp
 from jax import random
-from jax import vmap
+from jax import vmap, jit
 from jax.config import config as jax_config
 jax_config.update('jax_enable_x64', True)
 
@@ -69,9 +69,9 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
     identity_quaternion_vec = jnp.array([1.0, 0.0, 0.0, 0.0]) # note: [1.0, 0.0, 0.0, 0.0] is the identity for quat. multiplication
     identity_translation = jnp.array([0.0, 0.0, 0.0]) # note: under addition
 
-    for i, iter_key, seed_vertex, move_type in tqdm(zip(range(n_steps), iter_keys, seed_vertices, move_types)):
+    @jit
+    def step_fn(mu, iter_key, seed_vertex, move_type):
         iter_key, move_key = random.split(iter_key, 2)
-
 
         trans_move = jnp.where(move_type == 0,
                                utils.gen_random_displacement(r_min=0.5, r_max=1.0, key=move_key),
@@ -134,8 +134,12 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
         # note: terms in `jnp.where` have to be arrays
         mu_center = jnp.where(is_frustrated, mu.center, mu_updated.center)
         mu_orientation = jnp.where(is_frustrated, mu.orientation.vec, mu_updated.orientation.vec)
-        mu = rigid_body.RigidBody(center=mu_center,
-                                  orientation=rigid_body.Quaternion(mu_orientation))
+        return rigid_body.RigidBody(center=mu_center,
+                                    orientation=rigid_body.Quaternion(mu_orientation))
+
+
+    for i, iter_key, seed_vertex, move_type in tqdm(zip(range(n_steps), iter_keys, seed_vertices, move_types)):
+        mu = step_fn(mu, iter_key, seed_vertex, move_type)
         traj.append(mu)
     return mu, traj
 
