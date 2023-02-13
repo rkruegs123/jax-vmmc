@@ -69,7 +69,7 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
     identity_quaternion_vec = jnp.array([1.0, 0.0, 0.0, 0.0]) # note: [1.0, 0.0, 0.0, 0.0] is the identity for quat. multiplication
     identity_translation = jnp.array([0.0, 0.0, 0.0]) # note: under addition
 
-    @jit
+    # @jit
     def step_fn(mu, iter_key, seed_vertex, move_type):
         iter_key, move_key = random.split(iter_key, 2)
 
@@ -128,14 +128,30 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
 
         # check rejection with C * F * (1 - C)
         # is_frustrated = jnp.matmul(jnp.matmul(cluster, frustrated), 1 - cluster)
-        is_frustrated = jnp.outer(cluster, 1-cluster) * frustrated
+        boundary = jnp.outer(cluster, 1-cluster) # jnp.outer(cluster, 1-cluster)` has entry ij=1 when i is in the cluster and j is not
+        is_frustrated = boundary * frustrated
         is_frustrated = is_frustrated.sum()
 
         # note: terms in `jnp.where` have to be arrays
         mu_center = jnp.where(is_frustrated, mu.center, mu_updated.center)
         mu_orientation = jnp.where(is_frustrated, mu.orientation.vec, mu_updated.orientation.vec)
-        return rigid_body.RigidBody(center=mu_center,
-                                    orientation=rigid_body.Quaternion(mu_orientation))
+        mu_updated = rigid_body.RigidBody(center=mu_center,
+                                          orientation=rigid_body.Quaternion(mu_orientation))
+
+        # Now, compute the probability of this step:
+        link_probs = jnp.multiply(prelink_probs, all_link_probs) # note: includes both the prelink and full link probs
+        in_cluster = jnp.outer(cluster, cluster)
+        possible_cluster_link_probs = jnp.multiply(jnp.multiply(in_cluster, link_probs), all_link_coinflips)
+        prob_cluster = jnp.where(possible_cluster_link_probs, possible_cluster_link_probs, 1.0).prod() # (i). FIXME: will overestimate. This assumes that all possible links b/w anything in the cluster had to form. In reality, only one -- but not the max probability. Well, does order matter?
+
+        prob_no_boundary_frustrated = jnp.where(boundary, 1-prelink_probs, 1).prod() # (ii)
+        prob_boundary_frustrated = 1 - prob_no_boundary_frustrated # (iii)
+
+        prob_step = jnp.where(is_frustrated,
+                              prob_cluster * prob_boundary_frustrated,
+                              prob_cluster * prob_no_boundary_frustrated)
+
+        return mu_updated
 
 
     for i, iter_key, seed_vertex, move_type in tqdm(zip(range(n_steps), iter_keys, seed_vertices, move_types)):

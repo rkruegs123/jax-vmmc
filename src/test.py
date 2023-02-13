@@ -44,9 +44,9 @@ get_pairwise_energies = vmap(vmap(pairwise_energy_fn, in_axes=(None, 0)),
 if __name__ == "__main__":
     import vmmc
 
-    n = 20
+    n = 10
     # box_size = quantity.box_size_at_number_density(n, 0.1, 3)
-    box_size = 20
+    box_size = 5
     displacement, shift = space.periodic(box_size)
 
     key = random.PRNGKey(0)
