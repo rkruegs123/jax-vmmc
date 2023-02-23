@@ -51,7 +51,7 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5,
 
         nu = rigid_body.RigidBody(mu.center + trans_move, mu.orientation + rot_move)
         """
-        nu_rot = utils.rand_2d_rotation(mu, a_max, theta_max, move_key)
+        nu_rot = utils.rand_2d_rotation(mu, a_max, theta_max, seed_vertex, move_key)
         nu_trans = utils.rand_2d_translation(mu, r_min, r_max, move_key)
 
         nu_center = jnp.where(move_type == 0,

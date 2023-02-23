@@ -64,15 +64,14 @@ def rand_2d_translation(mu, r_min, r_max, key):
     nu = rigid_body.RigidBody(mu.center + trans_move, mu.orientation)
     return nu
 
-def rand_2d_rotation(mu, a_max, theta_max, key):
+def rand_2d_rotation(mu, a_max, theta_max, seed_vertex, key):
     n = mu.center.shape[0]
-    a_key, theta_key, center_key, u_key = random.split(key, 4)
+    a_key, theta_key, u_key = random.split(key, 3)
 
-    center_idx = random.randint(center_key, shape=(), minval=0, maxval=n-1)
     u_theta = random.uniform(u_key, minval=0, maxval=2*jnp.pi)
     u = jnp.array([jnp.cos(u_theta), jnp.sin(u_theta)])
     a = random.uniform(a_key, minval=0, maxval=a_max)
-    rot_center = mu[center_idx].center + a*u
+    rot_center = mu[seed_vertex].center + a*u
 
     theta = random.uniform(theta_key, minval=-theta_max, maxval=theta_max)
     rot_matrix = jnp.array([[jnp.cos(theta), -jnp.sin(theta)], [jnp.sin(theta), jnp.cos(theta)]])
