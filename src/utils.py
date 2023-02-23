@@ -47,7 +47,6 @@ def gen_random_displacement(r_min, r_max, key):
     return jnp.array([x, y, z])
 
 
-
 def gen_random_displacement_2d(r_min, r_max, key):
     radii_key, theta_key = random.split(key, 2)
 
@@ -58,6 +57,30 @@ def gen_random_displacement_2d(r_min, r_max, key):
     y = radius * jnp.sin(theta)
 
     return jnp.array([x, y])
+
+
+def rand_2d_translation(mu, r_min, r_max, key):
+    trans_move = gen_random_displacement_2d(r_min, r_max, key)
+    nu = rigid_body.RigidBody(mu.center + trans_move, mu.orientation)
+    return nu
+
+def rand_2d_rotation(mu, a_max, theta_max, key):
+    n = mu.center.shape[0]
+    a_key, theta_key, center_key, u_key = random.split(key, 4)
+
+    center_idx = random.randint(center_key, shape=(), minval=0, maxval=n-1)
+    u_theta = random.uniform(u_key, minval=0, maxval=2*jnp.pi)
+    u = jnp.array([jnp.cos(u_theta), jnp.sin(u_theta)])
+    a = random.uniform(a_key, minval=0, maxval=a_max)
+    rot_center = mu[center_idx].center + a*u
+
+    theta = random.uniform(theta_key, minval=-theta_max, maxval=theta_max)
+    rot_matrix = jnp.array([[jnp.cos(theta), -jnp.sin(theta)], [jnp.sin(theta), jnp.cos(theta)]])
+
+    nu_center = (rot_matrix @ (mu.center - rot_center).T).T + rot_center
+    nu = rigid_body.RigidBody(nu_center, mu.orientation + theta)
+    return nu
+
 
 
 def get_rand_rigid_body(n, box_size, key):

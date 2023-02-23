@@ -15,7 +15,8 @@ import utils
 
 
 
-def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
+def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5,
+         r_min=0.0, r_max=1.0, a_max = 0.5, theta_max=jnp.pi/6):
     n = body.center.shape[0]
     seed_vertices_key, move_key, key = random.split(key, 3)
     seed_vertices = jax.random.randint(seed_vertices_key, (n_steps,), minval=0, maxval=n-1)
@@ -39,14 +40,28 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
     def step_fn(mu, iter_key, seed_vertex, move_type):
         iter_key, move_key = random.split(iter_key, 2)
 
+        """
         trans_move = jnp.where(move_type == 0,
-                               utils.gen_random_displacement_2d(r_min=0.5, r_max=1.0, key=move_key),
+                               utils.gen_random_displacement_2d(r_min=r_min, r_max=r_max, key=move_key),
                                identity_translation)
+
         rot_move = jnp.where(move_type == 1,
                              random.uniform(move_key, minval=0.0, maxval=jnp.pi / 6),
                              identity_theta)
 
         nu = rigid_body.RigidBody(mu.center + trans_move, mu.orientation + rot_move)
+        """
+        nu_rot = utils.rand_2d_rotation(mu, a_max, theta_max, move_key)
+        nu_trans = utils.rand_2d_translation(mu, r_min, r_max, move_key)
+
+        nu_center = jnp.where(move_type == 0,
+                              nu_trans.center,
+                              nu_rot.center)
+        nu_orientation = jnp.where(move_type == 0,
+                                   nu_trans.orientation,
+                                   nu_rot.orientation)
+        nu = rigid_body.RigidBody(nu_center, nu_orientation)
+
 
         eps_mu_mu, eps_mu_nu, eps_nu_mu = gen_tables_fn(mu, nu)
 

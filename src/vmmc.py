@@ -143,6 +143,8 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
         in_cluster = jnp.outer(cluster, cluster)
         possible_cluster_link_probs = jnp.multiply(jnp.multiply(in_cluster, link_probs), all_link_coinflips)
         prob_cluster = jnp.where(possible_cluster_link_probs, possible_cluster_link_probs, 1.0).prod() # (i). FIXME: will overestimate. This assumes that all possible links b/w anything in the cluster had to form. In reality, only one -- but not the max probability. Well, does order matter?
+        if cluster.sum() > 1:
+            pdb.set_trace()
 
         prob_no_boundary_frustrated = jnp.where(boundary, 1-prelink_probs, 1).prod() # (ii)
         prob_boundary_frustrated = 1 - prob_no_boundary_frustrated # (iii)
