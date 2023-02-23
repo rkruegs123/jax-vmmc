@@ -16,7 +16,7 @@ import utils
 
 
 def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5,
-         r_min=0.0, r_max=1.0, a_max = 0.5, theta_max=jnp.pi/6):
+         r_min=0.0, r_max=1.0, a_max=0.5, theta_max=jnp.pi/6):
     n = body.center.shape[0]
     seed_vertices_key, move_key, key = random.split(key, 3)
     seed_vertices = jax.random.randint(seed_vertices_key, (n_steps,), minval=0, maxval=n-1)
