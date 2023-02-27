@@ -81,6 +81,53 @@ def rand_2d_rotation(mu, a_max, theta_max, seed_vertex, key):
     return nu
 
 
+# Copied from: https://rowan.readthedocs.io/en/latest/package-rowan.html#rowan.from_axis_angle
+def from_axis_angle(axis, angle):
+    # First reshape angles and compute the half angle
+    ha = angle / 2.0
+
+    # Normalize the vector
+    norm = jnp.linalg.norm(axis)
+    u = axis / norm
+
+    # Compute the components of the quaternions
+    scalar_vec = jnp.array([jnp.cos(ha)])
+    vec_comp = jnp.sin(ha) * u
+
+    return jnp.concatenate((scalar_vec, vec_comp))
+
+
+def rand_3d_rotation(mu, seed_vertex, theta_max, a_max, key):
+    n = mu.center.shape[0]
+    a_key, u_key, uo_key, theta_key = random.split(key, 4)
+
+    # Get the point around which we will rotate
+    rand_vec = random.normal(u_key, shape=(3,))
+    u = rand_vec / jnp.linalg.norm(rand_vec)
+    a = random.uniform(a_key, minval=0, maxval=a_max)
+    rot_center = mu[seed_vertex].center + a*u
+
+    # Get a random axis and angle, and the corresponding quaternion
+    unnormed_rot_axis = random.normal(uo_key, shape=(3,))
+    rot_axis = unnormed_rot_axis / jnp.linalg.norm(unnormed_rot_axis)
+    theta = random.uniform(theta_key, minval=-theta_max, maxval=theta_max)
+    quat_vec = from_axis_angle(rot_axis, theta)
+    quat = rigid_body.Quaternion(quat_vec)
+
+    # Calculate nu w.r.t. the center of rotation and the quaternion
+    mu_center_adj = mu.center - rot_center
+    nu_center_adj = rigid_body.quaternion_rotate(quat, mu_center_adj)
+    nu_center = nu_center_adj + rot_center
+    nu_orientation = mu.orientation * quat
+
+    return rigid_body.RigidBody(nu_center, nu_orientation)
+
+def rand_3d_translation(mu, r_min, r_max, key):
+    disp = gen_random_displacement(r_min=r_min, r_max=r_max, key=key)
+    return rigid_body.RigidBody(mu.center+disp, mu.orientation)
+
+
+
 
 def get_rand_rigid_body(n, box_size, key):
     pos_key, quat_key = random.split(key, 2)

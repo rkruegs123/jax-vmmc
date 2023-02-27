@@ -45,7 +45,8 @@ Note:
 - assumes that order doesn't matter
   - i.e. link formation of ij doesn't depend on link formation of kl
 """
-def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
+def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5,
+         r_min=0.0, r_max=1.0, a_max=0.5, theta_max=jnp.pi/6):
     n = body.center.shape[0]
     seed_vertices_key, move_key, key = random.split(key, 3)
     seed_vertices = jax.random.randint(seed_vertices_key, (n_steps,), minval=0, maxval=n-1)
@@ -73,6 +74,19 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
     def step_fn(mu, iter_key, seed_vertex, move_type):
         iter_key, move_key = random.split(iter_key, 2)
 
+
+        nu_rot = utils.rand_3d_rotation(mu, seed_vertex, theta_max, a_max, move_key)
+        nu_trans = utils.rand_3d_translation(mu, r_min, r_max, move_key)
+
+        nu_center = jnp.where(move_type == 0,
+                              nu_trans.center,
+                              nu_rot.center)
+        nu_orientation_vec = jnp.where(move_type == 0,
+                                   nu_trans.orientation.vec,
+                                   nu_rot.orientation.vec)
+        nu = rigid_body.RigidBody(nu_center, rigid_body.Quaternion(nu_orientation_vec))
+
+        """
         trans_move = jnp.where(move_type == 0,
                                utils.gen_random_displacement(r_min=0.5, r_max=1.0, key=move_key),
                                identity_translation)
@@ -83,6 +97,7 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5):
         rot_move = rigid_body.Quaternion(rot_move_vec)
 
         nu = rigid_body.RigidBody(mu.center + trans_move, rot_move * mu.orientation)
+        """
 
         eps_mu_mu, eps_mu_nu, eps_nu_mu = gen_tables_fn(mu, nu)
 
