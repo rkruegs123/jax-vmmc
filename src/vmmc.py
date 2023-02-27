@@ -70,7 +70,7 @@ def vmmc(body, gen_tables_fn, key, n_steps=10, temp=0.3, rot_threshold=0.5,
     identity_quaternion_vec = jnp.array([1.0, 0.0, 0.0, 0.0]) # note: [1.0, 0.0, 0.0, 0.0] is the identity for quat. multiplication
     identity_translation = jnp.array([0.0, 0.0, 0.0]) # note: under addition
 
-    # @jit
+    @jit
     def step_fn(mu, iter_key, seed_vertex, move_type):
         iter_key, move_key = random.split(iter_key, 2)
 
